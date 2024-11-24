@@ -20,13 +20,6 @@ export class CreateOrderDto {
   @ValidateNested({ each: true })
   @Type(() => OrderItem)
   orderItems: OrderItem[];
-
-  @ApiProperty({ description: 'total price of order', type: Number })
-  @IsNumber()
-  totalPrice: number;
 }
 
-export class UpdateOrderDto {
-  @ApiProperty({ description: 'Status of the order', example: 'completed' })
-  status: 'pending' | 'completed' | 'canceled';
-}
+export class UpdateOrderDto extends CreateOrderDto {}

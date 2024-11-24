@@ -5,7 +5,6 @@ import {
   ManyToOne,
   Column,
   JoinColumn,
-  OneToOne,
 } from 'typeorm';
 import { Order } from './order.entity';
 import { Grocery } from 'src/grocery/grocery.entity/grocery.entity';
@@ -19,7 +18,8 @@ export class OrderItem {
   @ManyToOne(() => Order, (order) => order.orderItems)
   order: Order;
 
-  @OneToOne(() => Grocery, (grocery) => grocery.id)
+  // A grocery can be part of many order items (one-to-many relation)
+  @ManyToOne(() => Grocery)
   @JoinColumn({ name: 'grocery_id' })
   grocery: Grocery;
 

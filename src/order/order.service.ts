@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Order } from './order.entity/order.entity';
@@ -25,61 +25,144 @@ export class OrderService {
     const user = await this.userRepository.findOne({ where: { id: userId } });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.BAD_REQUEST,
+          message: 'User not found',
+          error: 'Bad Request',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
-    // Initialize total price for the order
     let totalPrice = 0;
-
-    // Create a new order instance
-    const order = this.orderRepository.create({
-      user,
-    });
-
-    // Iterate over orderItems to calculate total price and prepare for saving
     const orderItems: OrderItem[] = [];
+
     for (const item of createOrderDto.orderItems) {
       const grocery = await this.groceryRepository.findOne({
         where: { id: item.groceryId },
       });
 
       if (!grocery) {
-        throw new Error(`Grocery item with ID ${item.groceryId} not found`);
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.NOT_FOUND,
+            message: `Grocery item with ID ${item.groceryId} not found`,
+            error: 'Not Found',
+          },
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      // Check stock availability
+      if (grocery.quantityInStock < item.quantity) {
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: `Insufficient stock for grocery item ID ${item.groceryId}`,
+            error: 'Bad Request',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
       }
 
       const itemTotalPrice = grocery.price * item.quantity;
       totalPrice += itemTotalPrice;
 
-      // Create an OrderItem instance
       const orderItem = new OrderItem();
       orderItem.grocery = grocery;
       orderItem.quantity = item.quantity;
-      orderItem.totalPrice = itemTotalPrice; // Store price for this item
+      orderItem.totalPrice = itemTotalPrice;
 
-      // Add OrderItem to the list
       orderItems.push(orderItem);
+
+      grocery.quantityInStock -= item.quantity;
+      await this.groceryRepository.save(grocery);
     }
 
-    // Save the order with the total price and items
-    order.totalPrice = totalPrice;
-    order.orderItems = orderItems;
+    const order = this.orderRepository.create({
+      user,
+      totalPrice,
+      orderItems,
+    });
 
-    // Save the order (this will also save the related orderItems because of cascading)
     return await this.orderRepository.save(order);
   }
 
   async updateOrder(
+    userId: number,
     id: number,
     updateOrderDto: UpdateOrderDto,
-  ): Promise<Order> {
-    const order = await this.orderRepository.findOne({ where: { id } });
+  ) {
+    // Find the order by ID, including the user relation
+    const order = await this.orderRepository.findOne({
+      where: { id },
+      relations: ['user', 'orderItems', 'orderItems.grocery'], // Include order items and groceries for stock check
+    });
+    console.log('🚀 ~ OrderService ~ order:', order);
 
     if (!order) {
-      throw new Error('Order not found');
+      throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
     }
 
-    const updatedOrder = Object.assign(order, updateOrderDto);
-    return this.orderRepository.save(updatedOrder);
+    // Check if the order belongs to the current user
+    if (order.user.id !== userId) {
+      throw new HttpException(
+        'You can only update your own orders',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    let totalPrice = 0;
+
+    for (const item of updateOrderDto.orderItems) {
+      console.log('item:', item);
+
+      const orderItem = order.orderItems.find(
+        (oi) => oi.grocery.id === item.groceryId,
+      );
+      console.log('🚀 ~ OrderService ~ orderItem:', orderItem);
+
+      if (!orderItem) {
+        throw new HttpException(
+          `Order item with grocery ID ${item.groceryId} not found in this order`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const grocery = orderItem.grocery;
+
+      // Check stock availability for the updated quantity
+      if (grocery.quantityInStock + orderItem.quantity < item.quantity) {
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: `Insufficient stock for grocery item ID ${item.groceryId}`,
+            error: 'Bad Request',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      grocery.quantityInStock =
+        grocery.quantityInStock + orderItem.quantity - item.quantity;
+
+      await this.groceryRepository.update(
+        { id: grocery.id }, // Criteria: Find by grocery ID
+        { quantityInStock: grocery.quantityInStock }, // Update data: Set the new stock value
+      );
+      // Update the order item quantity and total price for that item
+      orderItem.quantity = item.quantity;
+      orderItem.totalPrice = grocery.price * item.quantity;
+
+      totalPrice += orderItem.totalPrice;
+    }
+
+    // Update the total price of the order
+    order.totalPrice = totalPrice;
+
+    // Save the updated order
+    return this.orderRepository.save(order);
   }
 
   async getOrdersByUser(userId: number): Promise<Order[]> {

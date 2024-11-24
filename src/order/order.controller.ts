@@ -52,15 +52,15 @@ export class OrderController {
     @Param('id') id: number,
     @Body() updateOrderDto: UpdateOrderDto,
   ) {
-    return this.orderService.updateOrder(id, updateOrderDto);
+    return this.orderService.updateOrder(req.user.userId, id, updateOrderDto);
   }
 
-  @Get('user/:userId')
+  @Get('user')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all orders for a specific user' })
   @ApiResponse({ status: 200, description: 'List of user orders.' })
-  async getOrdersByUser(@Param('userId') userId: number) {
-    return this.orderService.getOrdersByUser(userId);
+  async getOrdersByUser(@Request() req) {
+    return this.orderService.getOrdersByUser(req.user.userId);
   }
 
   @Get()
