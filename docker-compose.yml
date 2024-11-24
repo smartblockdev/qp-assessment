@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  app:
+    image: your-nestjs-app-image  # Replace this with your app's Docker image
+    build: .
+    ports:
+      - "3000:3000"  # Expose port 3000 from the container to your local machine
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
+      - APP_PORT=${APP_PORT}
+    env_file:
+      - .env
+
+  mysql:
+    image: mysql:8.0  # Use MySQL 8.0 Docker image
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql  # Persist MySQL data in a Docker volume
+
+volumes:
+  mysql-data:  # Persistent volume for MySQL data
+
+networks:
+  default:
+    external:
+      name: app-network  # Optional: Custom network if you need it
