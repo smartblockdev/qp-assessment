@@ -1,14 +1,12 @@
-version: '3.8'
-
 services:
   app:
-    image: your-nestjs-app-image  # Replace this with your app's Docker image
     build: .
+    image: your-nestjs-app-image  # Replace this with your app's Docker image
     ports:
       - "3000:3000"  # Expose port 3000 from the container to your local machine
     environment:
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
+      - DB_HOST=mysql  # Docker service name for MySQL
+      - DB_PORT=3306
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
@@ -17,23 +15,27 @@ services:
       - APP_PORT=${APP_PORT}
     env_file:
       - .env
+    depends_on:
+      - mysql  # Ensures the MySQL service starts before the app
 
   mysql:
-    image: mysql:8.0  # Use MySQL 8.0 Docker image
+    image: mysql:latest
+    restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
-      MYSQL_DATABASE: ${DB_NAME}
-      MYSQL_USER: ${DB_USERNAME}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "3306:3306"
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=${DB_NAME}  # Set the database name to be created
+      - MYSQL_USER=root  # Set the non-root user
+      - MYSQL_PASSWORD=root # Set the password for the non-root user
+    env_file:
+      - .env
     volumes:
-      - mysql-data:/var/lib/mysql  # Persist MySQL data in a Docker volume
+      - mysql:/var/lib/mysql  # Persist MySQL data in a Docker volume
+    ports:
+      - '3306:3306'  # Expose MySQL port
 
 volumes:
-  mysql-data:  # Persistent volume for MySQL data
+  mysql:
 
 networks:
   default:
-    external:
-      name: app-network  # Optional: Custom network if you need it
+    driver: bridge
